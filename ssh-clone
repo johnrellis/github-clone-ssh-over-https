@@ -1,0 +1,66 @@
+#!/bin/bash
+set -euo pipefail
+
+usage() {
+  cat <<'EOF'
+Usage:
+  gh-clone-ssh443.sh <repo-url>
+
+Accepts:
+  - git@github.com:owner/repo.git
+  - https://github.com/owner/repo(.git)
+  - ssh://git@github.com/owner/repo(.git)
+
+Clones using:
+  ssh://git@ssh.github.com:443/owner/repo(.git)
+
+Examples:
+  gh-clone-ssh443.sh git@github.com:johnrellis/secure-api.git
+  gh-clone-ssh443.sh https://github.com/johnrellis/secure-api
+EOF
+}
+
+if [[ $# -lt 1 ]] || [[ "${1:-}" == "-h" ]] || [[ "${1:-}" == "--help" ]]; then
+  usage
+  exit 0
+fi
+
+if ! command -v git >/dev/null 2>&1; then
+  echo "Error: git is not installed or not on PATH." >&2
+  exit 1
+fi
+
+src="$1"
+dest=""
+
+# 1) git@github.com:owner/repo(.git)
+if [[ "$src" =~ ^git@github\.com:(.+)$ ]]; then
+  path="${BASH_REMATCH[1]}"
+  path="${path#/}" # normalize, just in case
+  dest="ssh://git@ssh.github.com:443/${path}"
+
+# 2) https://github.com/owner/repo(.git)
+elif [[ "$src" =~ ^https://github\.com/([^/]+)/([^/]+?)(\.git)?$ ]]; then
+  owner="${BASH_REMATCH[1]}"
+  repo="${BASH_REMATCH[2]}"
+  dotgit="${BASH_REMATCH[3]:-}"
+  dest="ssh://git@ssh.github.com:443/${owner}/${repo}${dotgit}"
+
+# 3) ssh://git@github.com/owner/repo(.git)
+elif [[ "$src" =~ ^ssh://git@github\.com(:[0-9]+)?/(.+)$ ]]; then
+  path="${BASH_REMATCH[2]}"
+  path="${path#/}"
+  dest="ssh://git@ssh.github.com:443/${path}"
+
+else
+  echo "Error: unsupported URL format: $src" >&2
+  echo "Expected formats:" >&2
+  echo "  - git@github.com:owner/repo.git" >&2
+  echo "  - https://github.com/owner/repo(.git)" >&2
+  echo "  - ssh://git@github.com/owner/repo(.git)" >&2
+  exit 1
+fi
+
+echo "Cloning via SSH over HTTPS (443):"
+echo "  $dest"
+git clone "$dest"
